@@ -26,12 +26,6 @@ final class AutoIncrementableID {
         }
     }
     
-    static func set<T: Object>(id: Int, of type: T.Type) {
-        return serialQueue.sync {
-            save(id: id, key: autoIncrementIdkey(of: type))
-        }
-    }
-    
     private static func save(id: Int, key: String) {
         UserDefaults.standard.set(id, forKey: key)
         UserDefaults.standard.synchronize()
