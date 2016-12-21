@@ -20,7 +20,7 @@ final class Blog: Object {
     
     convenience init(title: String, body: String, author: String) {
         self.init()
-        self.id = AutoIncrementableID(for: type(of: self)).incremented()
+        self.id = AutoIncrementableID.incremented(for: type(of: self))
         self.title = title
         self.body = body
         self.author = author

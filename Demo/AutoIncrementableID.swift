@@ -10,30 +10,56 @@ import Foundation
 import Realm
 import RealmSwift
 
-final class AutoIncrementableID {
+class AutoIncrementableID: Object {
+    dynamic var typename: String = ""
+    dynamic var id: Int = 0
     
-    private static let serialQueue: DispatchQueue = DispatchQueue(label: "AutoIncrementableID serial queue")
-    
-    private let key: String
-    
-    init<T: Object>(for type: T.Type) {
-        self.key = "auto_increment_id_\(String(describing: type))"
+    private convenience init<T: Object>(for type: T.Type) {
+        self.init()
+        self.typename = String(describing: type)
     }
+
+    private static let internalSerialQueue = DispatchQueue(label: "internal AutoIncrementableID serial queue")
+    private static var serialQueues: [String: DispatchQueue] = [:]
     
-    func incremented() -> Int {
-        return type(of: self).serialQueue.sync {
-            let next = loadId().map { $0 + 1 } ?? 0
-            save(id: next)
-            return next
+    static func incremented<T: Object>(for type: T.Type) -> Int {
+        return serialQueue(for: type).sync {
+            let realm = try! Realm()
+
+            var nextId: Int = 0
+
+            let execute = { () -> Int in
+                if let autoIncrementableID = realm.objects(AutoIncrementableID.self).filter({ $0.typename == String(describing: type) }).first {
+                    let nextId = autoIncrementableID.id + 1
+                    autoIncrementableID.id = nextId
+                    return nextId
+                } else {
+                    realm.add(AutoIncrementableID(for: type))
+                    return 0
+                }
+            }
+            
+            if !realm.isInWriteTransaction {
+                realm.beginWrite()
+                nextId = execute()
+                try! realm.commitWrite()
+            } else {
+                nextId = execute()
+            }
+            print(type, "next", nextId)
+            return nextId
         }
     }
-    
-    private func loadId() -> Int? {
-        return UserDefaults.standard.object(forKey: key) as? Int
-    }
-    
-    private func save(id: Int) {
-        UserDefaults.standard.set(id, forKey: key)
-        UserDefaults.standard.synchronize()
+        
+    private static func serialQueue<T: Object>(for type: T.Type) -> DispatchQueue {
+        return internalSerialQueue.sync {
+            let key = String(describing: type)
+            guard let queue = serialQueues[key] else{
+                let newQueue = DispatchQueue(label: "AutoIncrementableID serial queue \(key)")
+                serialQueues[key] = newQueue
+                return newQueue
+            }
+            return queue
+        }
     }
 }
